@@ -2,6 +2,9 @@
 
 Corporate Treasury Asset and Liability Management (ALM) pipeline for FX exposure.
 
+![Web UI Demo](img/fx-treasury-alm.png)
+
+
 1. **Extraction** (`main.py`, uses `blpapi`): pulls live FX spot rates, forward points and history from Bloomberg, calculates 95%/99% historical Value-at-Risk (VaR) and forward carry, and logs each run to a local SQLite database, `treasury_alm.db`.
 2. **Dashboard** (`src/blproj/app.py`): a read-only Flask web dashboard that visualizes what the extraction script has stored.
 
