@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FX Treasury ALM</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #000000;
+      --panel: #050505;
+      --line: #2b2b2b;
+      --line-soft: #161616;
+      --amber: #ffa028;
+      --amber-dim: #a8680f;
+      --text: #e8e8e8;
+      --muted: #858585;
+      --pos: #34d676;
+      --neg: #ff4d4f;
+      --cyan: #4fc3f7;
+      --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+      --label: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+    }
+
+    html, body { background: var(--bg); color: var(--text); }
+    body { font-family: var(--mono); font-size: 13px; margin: 0; min-height: 100vh; }
+    a { color: var(--amber); }
+    :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+    .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+    .pos { color: var(--pos); }
+    .neg { color: var(--neg); }
+
+    /* ---------- Top bar ---------- */
+    .topbar {
+      display: flex; flex-wrap: wrap; align-items: stretch; gap: 0 20px;
+      border-bottom: 1px solid var(--amber);
+      background: var(--bg);
+    }
+    .brand {
+      background: var(--amber); color: #000;
+      font-family: var(--label); font-weight: 700; font-size: 16px;
+      padding: 8px 16px; display: flex; align-items: center; white-space: nowrap;
+    }
+    .brand-sub { color: var(--muted); font-family: var(--label); font-size: 13px; align-self: center; }
+    .topstats { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; padding: 6px 16px; }
+    .topstat { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
+    .topstat .k { color: var(--amber-dim); font-family: var(--label); font-weight: 600; }
+    .topstat .v { color: var(--text); }
+    .live { width: 8px; height: 8px; border-radius: 50%; background: var(--pos); display: inline-block; margin-right: 6px; }
+    .live.stale { background: var(--neg); }
+
+    /* ---------- Error banner ---------- */
+    .err {
+      display: none; margin: 12px 16px 0; padding: 8px 12px;
+      border: 1px solid var(--neg); color: var(--neg); background: #1a0505;
+    }
+    .err.show { display: block; }
+
+    /* ---------- KPI banner ---------- */
+    .wrap { padding: 14px 16px 28px; max-width: 1760px; margin: 0 auto; }
+    .kpis { border: 1px solid var(--line); background: var(--panel); }
+    .kpi { padding: 16px 20px 14px; border-right: 1px solid var(--line); height: 100%; }
+    .kpi:last-child { border-right: 0; }
+    .kpi .label { color: var(--amber); font-family: var(--label); font-weight: 600; font-size: 14px; }
+    .kpi .value { font-size: clamp(28px, 3.6vw, 52px); font-weight: 500; line-height: 1.1; margin: 6px 0 4px; letter-spacing: -0.02em; }
+    .kpi .delta { color: var(--muted); font-size: 12px; min-height: 18px; }
+    .kpi.accent-var .value { color: var(--amber); }
+
+    .secondary { border: 1px solid var(--line); border-top: 0; background: var(--panel); }
+    .sec { padding: 8px 20px; border-right: 1px solid var(--line-soft); }
+    .sec:last-child { border-right: 0; }
+    .sec .k { color: var(--muted); font-family: var(--label); font-weight: 500; font-size: 12px; }
+    .sec .v { font-size: 15px; }
+
+    @media (max-width: 767.98px) {
+      .kpi { border-right: 0; border-bottom: 1px solid var(--line); }
+      .kpi:last-child { border-bottom: 0; }
+      .sec { border-right: 0; }
+    }
+
+    /* ---------- Panels ---------- */
+    .panel { margin-top: 14px; border: 1px solid var(--line); background: var(--panel); }
+    .panel-head {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
+      padding: 6px 12px; background: #120c02; border-bottom: 1px solid var(--amber-dim);
+    }
+    .panel-title { color: var(--amber); font-family: var(--label); font-weight: 700; font-size: 14px; }
+    .panel-meta { color: var(--muted); font-size: 12px; }
+    .panel-tools { margin-left: auto; display: flex; gap: 4px; }
+
+    .rangebtn {
+      background: transparent; color: var(--muted); border: 1px solid var(--line);
+      font-family: var(--mono); font-size: 12px; padding: 2px 10px; cursor: pointer;
+    }
+    .rangebtn:hover { color: var(--text); border-color: var(--amber-dim); }
+    .rangebtn[aria-pressed="true"] { color: #000; background: var(--amber); border-color: var(--amber); }
+
+    /* ---------- Exposure table ---------- */
+    .tablewrap { overflow-x: auto; }
+    table.terminal { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    .terminal th {
+      position: sticky; top: 0; background: #0b0702; color: var(--amber);
+      font-family: var(--label); font-weight: 600; font-size: 12.5px;
+      text-align: right; padding: 7px 12px; border-bottom: 1px solid var(--amber-dim);
+    }
+    .terminal td { text-align: right; padding: 6px 12px; border-bottom: 1px solid var(--line-soft); }
+    .terminal th:first-child, .terminal td:first-child {
+      text-align: left; position: sticky; left: 0; background: var(--panel); z-index: 1;
+    }
+    .terminal th:first-child { background: #0b0702; z-index: 2; }
+    .terminal td:first-child { color: var(--amber); font-weight: 700; }
+    .terminal tbody tr:hover td { background: #111; }
+    .terminal tbody tr:hover td:first-child { background: #111; }
+    .terminal tfoot td {
+      border-top: 1px solid var(--amber-dim); border-bottom: 0; font-weight: 700;
+      background: #0b0702;
+    }
+    .terminal tfoot td:first-child { background: #0b0702; color: var(--amber); }
+    .terminal .muted { color: var(--muted); }
+    .empty { padding: 28px 16px; color: var(--muted); text-align: center; }
+
+    /* ---------- Chart ---------- */
+    .chartbox { position: relative; height: 380px; padding: 10px 12px 6px; }
+
+    .foot { margin-top: 14px; color: var(--muted); font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">FX TREASURY ALM</div>
+    <div class="brand-sub">Corporate treasury: exposure, hedging and risk</div>
+    <div class="topstats">
+      <div class="topstat"><span class="k">SOFR</span><span class="v num" id="top-sofr">-</span></div>
+      <div class="topstat"><span class="k">Last run</span><span class="v num" id="top-run">-</span></div>
+      <div class="topstat"><span class="k">Local time</span><span class="v num" id="top-clock">-</span></div>
+      <div class="topstat"><span class="v"><span class="live" id="live-dot"></span><span id="live-text">Connecting</span></span></div>
+    </div>
+  </header>
+
+  <div class="err" id="error-banner" role="alert"></div>
+
+  <main class="wrap">
+
+    <!-- KPI banner -->
+    <section aria-label="Key portfolio metrics">
+      <div class="kpis row g-0">
+        <div class="col-12 col-md-4"><div class="kpi">
+          <div class="label">Total carry (USD)</div>
+          <div class="value num" id="kpi-carry">-</div>
+          <div class="delta num" id="kpi-carry-d"></div>
+        </div></div>
+        <div class="col-12 col-md-4"><div class="kpi accent-var">
+          <div class="label">Diversified 1D VaR 95% (USD)</div>
+          <div class="value num" id="kpi-var">-</div>
+          <div class="delta num" id="kpi-var-d"></div>
+        </div></div>
+        <div class="col-12 col-md-4"><div class="kpi">
+          <div class="label">Diversification benefit (USD)</div>
+          <div class="value num" id="kpi-div">-</div>
+          <div class="delta num" id="kpi-div-d"></div>
+        </div></div>
+      </div>
+      <div class="secondary row g-0">
+        <div class="col-6 col-md"><div class="sec"><div class="k">Total unhedged</div><div class="v num" id="sec-unh">-</div></div></div>
+        <div class="col-6 col-md"><div class="sec"><div class="k">Total hedged</div><div class="v num" id="sec-hdg">-</div></div></div>
+        <div class="col-6 col-md"><div class="sec"><div class="k">Undiversified VaR 95%</div><div class="v num" id="sec-undiv">-</div></div></div>
+        <div class="col-6 col-md"><div class="sec"><div class="k">Diversified VaR 99%</div><div class="v num" id="sec-var99">-</div></div></div>
+      </div>
+    </section>
+
+    <!-- Exposure table -->
+    <section class="panel" aria-label="FX exposure monitor">
+      <div class="panel-head">
+        <span class="panel-title">FX exposure monitor</span>
+        <span class="panel-meta num" id="exp-meta"></span>
+      </div>
+      <div class="tablewrap">
+        <table class="terminal" id="exp-table">
+          <thead></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Chart -->
+    <section class="panel" aria-label="Value-at-Risk versus carry history">
+      <div class="panel-head">
+        <span class="panel-title">Diversified 1D VaR 95% vs total carry</span>
+        <span class="panel-meta num" id="chart-meta"></span>
+        <div class="panel-tools" role="group" aria-label="History range" id="range-tools">
+          <button class="rangebtn" data-limit="50"  aria-pressed="false">50 runs</button>
+          <button class="rangebtn" data-limit="250" aria-pressed="true">250 runs</button>
+          <button class="rangebtn" data-limit="1000" aria-pressed="false">1000 runs</button>
+        </div>
+      </div>
+      <div class="chartbox"><canvas id="risk-chart" role="img" aria-label="Line chart of diversified VaR 95 and total carry over time"></canvas></div>
+    </section>
+
+    <div class="foot">
+      <span>Source: treasury_alm.db (read-only)</span>
+      <span>VaR: 1-day historical simulation, USD</span>
+      <span>Auto-refresh every {{ refresh_seconds }}s</span>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>
+  (() => {
+    "use strict";
+
+    const REFRESH_MS = {{ refresh_seconds }} * 1000;
+    const state = {
+      limit: {{ history_default }},
+      data: {{ initial | tojson }},
+      initialError: {{ error | tojson }},
+      chart: null,
+      lastOk: null,
+    };
+
+    /* ---------- Formatting ---------- */
+    const fmtCache = {};
+    const nf = (d) => fmtCache[d] ??= new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+    const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+    const dash = "-";
+
+    const usd = (v) => isNum(v) ? (v < 0 ? "-" : "") + "$" + nf(0).format(Math.abs(v)) : dash;
+    const plain = (v, d = 0) => isNum(v) ? nf(d).format(v) : dash;
+    const signed = (v, d = 2, suffix = "") => isNum(v) ? (v > 0 ? "+" : v < 0 ? "-" : "") + nf(d).format(Math.abs(v)) + suffix : dash;
+    const px = (v, extra = 0) => isNum(v) ? nf((Math.abs(v) >= 20 ? 3 : 4) + extra).format(v) : dash;
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const sign = (v) => isNum(v) ? (v > 0 ? "pos" : v < 0 ? "neg" : "") : "";
+    const $ = (id) => document.getElementById(id);
+
+    /* ---------- Table definition ---------- */
+    const COLUMNS = [
+      { key: "CCY",            label: "CCY",            fmt: (v) => esc(v), plainText: true },
+      { key: "Notional",       label: "Notional",       fmt: (v) => plain(v), neg: true },
+      { key: "Spot",           label: "Spot",           fmt: (v) => px(v) },
+      { key: "1D_Chg%",        label: "1D Chg %",       fmt: (v) => signed(v, 2, "%"), color: true },
+      { key: "5D_Chg%",        label: "5D Chg %",       fmt: (v) => signed(v, 2, "%"), color: true },
+      { key: "Fwd_Pts",        label: "Fwd Pts",        fmt: (v) => signed(v, 2), color: true },
+      { key: "Outright_3M",    label: "3M Outright",    fmt: (v) => px(v, 1) },
+      { key: "Unhedged_USD",   label: "Unhedged USD",   fmt: (v) => usd(v), neg: true, total: true },
+      { key: "Hedged_USD",     label: "Hedged USD",     fmt: (v) => usd(v), neg: true, total: true },
+      { key: "Carry_USD",      label: "Carry USD",      fmt: (v) => usd(v), color: true, total: true },
+      { key: "Ann_Carry_Bps",  label: "Ann Carry bps",  fmt: (v) => signed(v, 1), color: true },
+      { key: "1D_VaR_95_USD",  label: "1D VaR 95 USD",  fmt: (v) => usd(v), portfolioKey: "Diversified_VaR_95_USD" },
+      { key: "1D_VaR_99_USD",  label: "1D VaR 99 USD",  fmt: (v) => usd(v), portfolioKey: "Diversified_VaR_99_USD" },
+    ];
+
+    function cellClass(col, v) {
+      if (col.color) return sign(v);
+      if (col.neg && isNum(v) && v < 0) return "neg";
+      return "";
+    }
+
+    /* ---------- Renderers ---------- */
+    function renderKpis(d) {
+      const cur = d.latest, prev = d.previous;
+      const set = (id, text, cls) => { const el = $(id); el.textContent = text; el.classList.remove("pos", "neg"); if (cls) el.classList.add(cls); };
+
+      if (!cur) {
+        ["kpi-carry", "kpi-var", "kpi-div", "sec-unh", "sec-hdg", "sec-undiv", "sec-var99", "top-sofr"].forEach((id) => set(id, dash));
+        ["kpi-carry-d", "kpi-var-d", "kpi-div-d"].forEach((id) => { $(id).textContent = ""; });
+        return;
+      }
+
+      set("kpi-carry", usd(cur.Total_Carry_USD), sign(cur.Total_Carry_USD));
+      set("kpi-var", usd(cur.Diversified_VaR_95_USD));
+      set("kpi-div", usd(cur.Diversification_Benefit_USD));
+
+      // goodWhen: which direction of change is favourable (carry up = good, VaR up = bad)
+      const delta = (id, key, goodWhen) => {
+        const el = $(id);
+        el.classList.remove("pos", "neg");
+        if (!prev || !isNum(cur[key]) || !isNum(prev[key])) { el.textContent = ""; return; }
+        const diff = cur[key] - prev[key];
+        const pct = prev[key] !== 0 ? (diff / Math.abs(prev[key])) * 100 : null;
+        const arrow = diff > 0 ? "\u25B2" : diff < 0 ? "\u25BC" : "\u25AC";
+        el.textContent = `${arrow} ${usd(diff)}${pct === null ? "" : ` (${signed(pct, 1, "%")})`} vs prior run`;
+        if (diff !== 0) el.classList.add((diff > 0) === (goodWhen === "up") ? "pos" : "neg");
+      };
+      delta("kpi-carry-d", "Total_Carry_USD", "up");
+      delta("kpi-var-d", "Diversified_VaR_95_USD", "down");
+      delta("kpi-div-d", "Diversification_Benefit_USD", "up");
+
+      set("sec-unh", usd(cur.Total_Unhedged_USD), cur.Total_Unhedged_USD < 0 ? "neg" : "");
+      set("sec-hdg", usd(cur.Total_Hedged_USD), cur.Total_Hedged_USD < 0 ? "neg" : "");
+      set("sec-undiv", usd(cur.Undiversified_VaR_95_USD));
+      set("sec-var99", usd(cur.Diversified_VaR_99_USD));
+      set("top-sofr", isNum(cur.SOFR_Rate_Pct) ? nf(3).format(cur.SOFR_Rate_Pct) + "%" : dash);
+    }
+
+    function renderTable(d) {
+      const rows = d.exposure.rows || [];
+      const table = $("exp-table");
+      const head = table.tHead, body = table.tBodies[0], foot = table.tFoot;
+
+      head.innerHTML = "<tr>" + COLUMNS.map((c) => `<th scope="col">${esc(c.label)}</th>`).join("") + "</tr>";
+
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="${COLUMNS.length}" class="empty">No exposure data. Run main.py to populate treasury_alm.db.</td></tr>`;
+        foot.innerHTML = "";
+        $("exp-meta").textContent = "";
+        return;
+      }
+
+      body.innerHTML = rows.map((r) =>
+        "<tr>" + COLUMNS.map((c) => {
+          const v = r[c.key];
+          const cls = ["num", cellClass(c, v)].filter(Boolean).join(" ");
+          return `<td class="${cls}">${c.fmt(v)}</td>`;
+        }).join("") + "</tr>"
+      ).join("");
+
+      // Totals: sum USD columns; VaR columns come from the portfolio (diversified) row
+      // of the same run, never from a sum of standalone VaRs.
+      const sameRun = d.latest && d.latest.Run_Timestamp === d.exposure.run_timestamp;
+      const sum = (key) => rows.reduce((a, r) => a + (isNum(r[key]) ? r[key] : 0), 0);
+      foot.innerHTML = "<tr>" + COLUMNS.map((c, i) => {
+        if (i === 0) return "<td>PORTFOLIO</td>";
+        let v = null;
+        if (c.total) v = sum(c.key);
+        else if (c.portfolioKey && sameRun) v = d.latest[c.portfolioKey];
+        if (v === null) return '<td class="muted">&nbsp;</td>';
+        return `<td class="num ${cellClass(c, v)}">${c.fmt(v)}</td>`;
+      }).join("") + "</tr>";
+
+      $("exp-meta").textContent = `${rows.length} currencies | run ${d.exposure.run_timestamp}` + (sameRun ? " | VaR totals are diversified" : " | VaR totals unavailable: summary run differs");
+    }
+
+    function shortTs(ts) {
+      // "2026-10-13 14:05:22" or ISO "2026-10-13T14:05:22" -> "10-13 14:05"
+      const m = /^\d{4}-(\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(ts || "");
+      return m ? `${m[1]} ${m[2]}` : (ts || "");
+    }
+
+    function renderChart(d) {
+      const h = d.history || [];
+      const labels = h.map((r) => r.Run_Timestamp);
+      const varData = h.map((r) => r.Diversified_VaR_95_USD);
+      const carryData = h.map((r) => r.Total_Carry_USD);
+
+      $("chart-meta").textContent = h.length ? `${h.length} runs | ${shortTs(labels[0])} to ${shortTs(labels[labels.length - 1])}` : "No history yet";
+
+      if (state.chart) {
+        state.chart.data.labels = labels;
+        state.chart.data.datasets[0].data = varData;
+        state.chart.data.datasets[1].data = carryData;
+        state.chart.update("none");
+        return;
+      }
+
+      Chart.defaults.color = "#858585";
+      Chart.defaults.font.family = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
+      Chart.defaults.font.size = 11;
+
+      state.chart = new Chart($("risk-chart"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Diversified VaR 95% (left)", data: varData, yAxisID: "yVar",
+              borderColor: "#ffa028", backgroundColor: "#ffa028",
+              borderWidth: 2, pointRadius: h.length > 80 ? 0 : 3, pointHoverRadius: 5, tension: 0.15,
+            },
+            {
+              label: "Total carry (right)", data: carryData, yAxisID: "yCarry",
+              borderColor: "#4fc3f7", backgroundColor: "#4fc3f7",
+              borderWidth: 2, pointRadius: h.length > 80 ? 0 : 3, pointHoverRadius: 5, tension: 0.15,
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "top", align: "start", labels: { boxWidth: 12, boxHeight: 2, color: "#e8e8e8", usePointStyle: false } },
+            tooltip: {
+              backgroundColor: "#0b0702", borderColor: "#a8680f", borderWidth: 1,
+              titleColor: "#ffa028", bodyColor: "#e8e8e8", padding: 10,
+              callbacks: { label: (c) => ` ${c.dataset.label.replace(/ \((left|right)\)/, "")}: ${usd(c.parsed.y)}` },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: "#121212" }, border: { color: "#2b2b2b" },
+              ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8, callback(v) { return shortTs(this.getLabelForValue(v)); } },
+            },
+            yVar: {
+              position: "left", grid: { color: "#1a1a1a" }, border: { color: "#a8680f" },
+              title: { display: true, text: "VaR 95% (USD)", color: "#ffa028" },
+              ticks: { color: "#ffa028", callback: (v) => usd(v) },
+            },
+            yCarry: {
+              position: "right", grid: { drawOnChartArea: false }, border: { color: "#2b7fa8" },
+              title: { display: true, text: "Carry (USD)", color: "#4fc3f7" },
+              ticks: { color: "#4fc3f7", callback: (v) => usd(v) },
+            },
+          },
+        },
+      });
+    }
+
+    function renderTopbar(d) {
+      const ts = (d.latest && d.latest.Run_Timestamp) || d.exposure.run_timestamp;
+      $("top-run").textContent = ts || dash;
+    }
+
+    function render(d) {
+      renderKpis(d);
+      renderTable(d);
+      renderChart(d);
+      renderTopbar(d);
+    }
+
+    /* ---------- Status / errors ---------- */
+    function setStatus(ok, msg) {
+      const banner = $("error-banner");
+      $("live-dot").classList.toggle("stale", !ok);
+      $("live-text").textContent = ok ? "Live" : "Disconnected";
+      banner.classList.toggle("show", !ok);
+      banner.textContent = ok ? "" : msg;
+    }
+
+    /* ---------- Data loading ---------- */
+    async function refresh() {
+      try {
+        const res = await fetch(`/api/dashboard?limit=${state.limit}`, { headers: { Accept: "application/json" } });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+        state.data = body;
+        state.lastOk = Date.now();
+        render(body);
+        setStatus(true);
+      } catch (err) {
+        setStatus(false, `Could not load data: ${err.message}. Showing the last successful snapshot.`);
+      }
+    }
+
+    /* ---------- Controls ---------- */
+    $("range-tools").addEventListener("click", (e) => {
+      const btn = e.target.closest(".rangebtn");
+      if (!btn) return;
+      state.limit = Number(btn.dataset.limit);
+      document.querySelectorAll(".rangebtn").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+      refresh();
+    });
+
+    function tickClock() {
+      $("top-clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });
+    }
+
+    /* ---------- Boot ---------- */
+    // Highlight the range button that matches the server default.
+    document.querySelectorAll(".rangebtn").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.limit) === state.limit)));
+
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    if (state.data) {
+      render(state.data);
+      state.lastOk = Date.now();
+      setStatus(true);
+    } else {
+      setStatus(false, state.initialError || "Database unavailable.");
+    }
+
+    setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  })();
+  </script>
+</body>
+</html>
